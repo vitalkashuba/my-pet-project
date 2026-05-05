@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}Увійти — Django Chat{% endblock %}
+{% block extra_css %}
+<style>
+.auth-card { max-width: 380px; margin: 3rem auto; background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 2rem; }
+h2 { font-size: 1.3rem; font-weight: 600; margin-bottom: 1.5rem; text-align: center; }
+.field { margin-bottom: 1rem; }
+label { display: block; font-size: 0.85rem; font-weight: 500; color: #374151; margin-bottom: 0.4rem; }
+input[type=text], input[type=password], textarea { width: 100%; padding: 0.6rem 0.9rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.95rem; outline: none; }
+input:focus, textarea:focus { border-color: #4f46e5; }
+.btn-full { width: 100%; padding: 0.7rem; background: #4f46e5; color: white; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 500; cursor: pointer; margin-top: 0.5rem; }
+.btn-full:hover { background: #4338ca; }
+.auth-link { text-align: center; margin-top: 1rem; font-size: 0.85rem; color: #6b7280; }
+.auth-link a { color: #4f46e5; text-decoration: none; }
+.errorlist { color: #dc2626; font-size: 0.82rem; margin-top: 0.25rem; list-style: none; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <h2>Вхід</h2>
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="field">
+      <label>{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}<ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn-full">Увійти</button>
+  </form>
+  <div class="auth-link">Немає акаунту? <a href="/register/">Зареєструватися</a></div>
+</div>
+{% endblock %}

@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+{% block title %}#{{ room.name }} — Django Chat{% endblock %}
+{% block extra_css %}
+<style>
+.chat-layout { display: flex; flex-direction: column; height: calc(100vh - 56px - 3rem); }
+.chat-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
+.chat-header h2 { font-size: 1.1rem; font-weight: 600; }
+.back-link { color: #6b7280; text-decoration: none; font-size: 0.9rem; }
+.back-link:hover { color: #1a1a2e; }
+.connection-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; font-weight: 500; }
+.badge-connecting { background: #fef3c7; color: #92400e; }
+.badge-connected { background: #d1fae5; color: #065f46; }
+.badge-error { background: #fee2e2; color: #991b1b; }
+.messages-wrap { flex: 1; overflow-y: auto; background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.msg { display: flex; flex-direction: column; max-width: 70%; }
+.msg.own { align-self: flex-end; align-items: flex-end; }
+.msg.other { align-self: flex-start; }
+.msg-author { font-size: 0.72rem; color: #9ca3af; margin-bottom: 2px; }
+.msg-bubble { padding: 0.5rem 0.85rem; border-radius: 14px; font-size: 0.9rem; line-height: 1.4; word-break: break-word; }
+.msg.own .msg-bubble { background: #4f46e5; color: white; border-bottom-right-radius: 4px; }
+.msg.other .msg-bubble { background: #f3f4f6; color: #1a1a1a; border-bottom-left-radius: 4px; }
+.msg-time { font-size: 0.68rem; color: #9ca3af; margin-top: 2px; }
+.system-msg { text-align: center; font-size: 0.78rem; color: #9ca3af; font-style: italic; padding: 0.25rem 0; }
+.input-row { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+.msg-input { flex: 1; padding: 0.65rem 1rem; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 0.95rem; outline: none; transition: border-color 0.15s; }
+.msg-input:focus { border-color: #4f46e5; }
+.send-btn { padding: 0.65rem 1.25rem; background: #4f46e5; color: white; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+.send-btn:hover { background: #4338ca; }
+.send-btn:disabled { background: #a5b4fc; cursor: not-allowed; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="chat-layout">
+  <div class="chat-header">
+    <a href="/" class="back-link">← Назад</a>
+    <h2>#{{ room.name }}</h2>
+    <span class="connection-badge badge-connecting" id="status-badge">Підключення...</span>
+  </div>
+
+  <div class="messages-wrap" id="messages">
+    {% for message in history %}
+    <div class="msg {% if message.author == request.user %}own{% else %}other{% endif %}">
+      <span class="msg-author">{{ message.author.username }}</span>
+      <div class="msg-bubble">{{ message.content }}</div>
+      <span class="msg-time">{{ message.created_at|date:"H:i" }}</span>
+    </div>
+    {% empty %}
+    <p class="system-msg">Повідомлень поки немає. Напишіть перше!</p>
+    {% endfor %}
+  </div>
+
+  <div class="input-row">
+    <input type="text" id="msg-input" class="msg-input" placeholder="Написати повідомлення..." autocomplete="off" disabled>
+    <button id="send-btn" class="send-btn" disabled>Надіслати</button>
+  </div>
+</div>
+
+<script>
+const roomSlug = '{{ room.slug }}';
+const currentUser = '{{ request.user.username }}';
+const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+const wsUrl = `${wsProto}://${location.host}/ws/chat/${roomSlug}/`;
+
+const messagesEl = document.getElementById('messages');
+const inputEl = document.getElementById('msg-input');
+const sendBtn = document.getElementById('send-btn');
+const statusBadge = document.getElementById('status-badge');
+
+let socket;
+
+function scrollToBottom() {
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function setStatus(state) {
+  const states = {
+    connecting: ['Підключення...', 'badge-connecting'],
+    connected:  ['Онлайн', 'badge-connected'],
+    error:      ['Відключено', 'badge-error'],
+  };
+  statusBadge.textContent = states[state][0];
+  statusBadge.className = 'connection-badge ' + states[state][1];
+  const online = state === 'connected';
+  inputEl.disabled = !online;
+  sendBtn.disabled = !online;
+}
+
+function addMessage(data) {
+  // Прибрати заглушку якщо є
+  const empty = messagesEl.querySelector('.system-msg');
+  if (empty) empty.remove();
+
+  const isOwn = data.is_own || data.username === currentUser;
+  const div = document.createElement('div');
+  div.className = `msg ${isOwn ? 'own' : 'other'}`;
+  div.innerHTML = `
+    <span class="msg-author">${data.username}</span>
+    <div class="msg-bubble">${escHtml(data.content)}</div>
+    <span class="msg-time">${data.timestamp}</span>
+  `;
+  messagesEl.appendChild(div);
+  scrollToBottom();
+}
+
+function addSystemMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'system-msg';
+  div.textContent = text;
+  messagesEl.appendChild(div);
+  scrollToBottom();
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function connect() {
+  setStatus('connecting');
+  socket = new WebSocket(wsUrl);
+
+  socket.onopen = () => setStatus('connected');
+
+  socket.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'message') addMessage(data);
+    else if (data.type === 'system') addSystemMessage(data.content);
+  };
+
+  socket.onclose = () => {
+    setStatus('error');
+    setTimeout(connect, 3000); // авто-перепідключення
+  };
+
+  socket.onerror = () => setStatus('error');
+}
+
+function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ type: 'message', content: text }));
+  inputEl.value = '';
+}
+
+sendBtn.addEventListener('click', sendMessage);
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+connect();
+scrollToBottom();
+</script>
+{% endblock %}

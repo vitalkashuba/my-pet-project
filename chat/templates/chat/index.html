@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Кімнати — Django Chat{% endblock %}
+{% block extra_css %}
+<style>
+h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1.25rem; }
+.rooms-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.room-card { background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1.25rem; text-decoration: none; color: inherit; display: block; transition: box-shadow 0.15s, border-color 0.15s; }
+.room-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-color: #c7d2fe; }
+.room-name { font-size: 1rem; font-weight: 600; color: #1a1a2e; margin-bottom: 0.4rem; }
+.room-desc { font-size: 0.85rem; color: #6b7280; }
+.room-meta { font-size: 0.75rem; color: #9ca3af; margin-top: 0.75rem; }
+.empty { text-align: center; padding: 3rem; color: #9ca3af; }
+.btn { display: inline-block; padding: 0.6rem 1.2rem; background: #4f46e5; color: white; border-radius: 6px; text-decoration: none; font-size: 0.9rem; font-weight: 500; margin-bottom: 1.25rem; }
+.btn:hover { background: #4338ca; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Кімнати чату</h1>
+<a href="/create/" class="btn">+ Нова кімната</a>
+{% if rooms %}
+<div class="rooms-grid">
+  {% for room in rooms %}
+  <a href="/room/{{ room.slug }}/" class="room-card">
+    <div class="room-name"># {{ room.name }}</div>
+    {% if room.description %}<div class="room-desc">{{ room.description }}</div>{% endif %}
+    <div class="room-meta">Створено: {{ room.created_at|date:"d.m.Y" }}</div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">Кімнат поки немає. Створіть першу!</div>
+{% endif %}
+{% endblock %}
